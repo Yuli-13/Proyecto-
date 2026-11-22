@@ -1,0 +1,31 @@
+//Registra entrada/salida y actualiza stock
+    pub fn registrar_movimiento(
+        ctx: Context<RegistrarMovimiento>,
+        es_entrada: bool,
+        cantidad: u32,
+    ) -> Result<()> {
+        require!(cantidad > 0, ErrorInventario::CantidadInvalida);
+
+        let producto = &mut ctx.accounts.producto;
+        let movimiento = &mut ctx.accounts.movimiento;
+
+        // Regla de negocio: No permitir salidas mayores al stock disponible
+        if es_entrada {
+            producto.stock_actual = producto.stock_actual.checked_add(cantidad).unwrap();
+        } else {
+            require!(
+                producto.stock_actual >= cantidad,
+                ErrorInventario::StockInsuficiente
+            );
+            producto.stock_actual = producto.stock_actual.checked_sub(cantidad).unwrap();
+        }
+
+        movimiento.producto = producto.key();
+        movimiento.es_entrada = es_entrada;
+        movimiento.cantidad = cantidad;
+        movimiento.timestamp = Clock::get()?.unix_timestamp;
+        movimiento.bump = ctx.bumps.movimiento;
+
+        producto.total_movimientos = producto.total_movimientos.checked_add(1).unwrap();
+        Ok(())
+    }
