@@ -1,0 +1,24 @@
+// CREACIÓN (Cuenta Hija): Agrega un producto vinculado al almacén
+    pub fn crear_producto(
+        ctx: Context<CrearProducto>,
+        sku: String,
+        nombre: String,
+        stock_inicial: u32,
+        precio_unitario: u64,
+    ) -> Result<()> {
+        require!(sku.len() <= 16 && nombre.len() <= 40, ErrorInventario::TextoMuyLargo);
+        
+        let almacen = &mut ctx.accounts.almacen;
+        let producto = &mut ctx.accounts.producto;
+
+        producto.almacen = almacen.key();
+        producto.sku = sku;
+        producto.nombre = nombre;
+        producto.stock_actual = stock_inicial;
+        producto.precio_unitario = precio_unitario;
+        producto.total_movimientos = 0;
+        producto.bump = ctx.bumps.producto;
+
+        almacen.total_productos = almacen.total_productos.checked_add(1).unwrap();
+        Ok(())
+    }
