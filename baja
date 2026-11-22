@@ -1,0 +1,146 @@
+//  BAJA / CIERRE CONDICIONADO: Elimina un producto y devuelve la renta (SOL)
+    pub fn dar_baja_producto(ctx: Context<DarBajaProducto>) -> Result<()> {
+        let producto = &ctx.accounts.producto;
+        let almacen = &mut ctx.accounts.almacen;
+
+        // REGLA CRÍTICA DE CIERRE: Solo se puede dar de baja si el stock es exactamente 0
+        require!(
+            producto.stock_actual == 0,
+            ErrorInventario::ProductoConStockActivo
+        );
+
+        almacen.total_productos = almacen.total_productos.checked_sub(1).unwrap();
+        Ok(())
+    }
+}
+
+// --- CONTEXTOS Y VALIDACIÓN DE PERMISOS ---
+
+#[derive(Accounts)]
+pub struct InicializarAlmacen<'info> {
+    #[account(
+        init,
+        payer = autoridad,
+        space = 8 + 32 + (4 + 32) + 4 + 1,
+        seeds = [b"almacen", autoridad.key().as_ref()],
+        bump
+    )]
+    pub almacen: Account<'info, Almacen>,
+    #[account(mut)]
+    pub autoridad: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(sku: String)]
+pub struct CrearProducto<'info> {
+    #[account(
+        mut,
+        seeds = [b"almacen", autoridad.key().as_ref()],
+        bump = almacen.bump,
+        has_one = autoridad // Verifica pertenencia
+    )]
+    pub almacen: Account<'info, Almacen>,
+    #[account(
+        init,
+        payer = autoridad,
+        space = 8 + 32 + (4 + 16) + (4 + 40) + 4 + 8 + 4 + 1,
+        seeds = [b"producto", almacen.key().as_ref(), sku.as_bytes()],
+        bump
+    )]
+    pub producto: Account<'info, Producto>,
+    #[account(mut)]
+    pub autoridad: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct RegistrarMovimiento<'info> {
+    #[account(
+        seeds = [b"almacen", autoridad.key().as_ref()],
+        bump = almacen.bump,
+        has_one = autoridad
+    )]
+    pub almacen: Account<'info, Almacen>,
+    #[account(
+        mut,
+        has_one = almacen
+    )]
+    pub producto: Account<'info, Producto>,
+    #[account(
+        init,
+        payer = autoridad,
+        space = 8 + 32 + 1 + 4 + 8 + 1,
+        seeds = [
+            b"movimiento",
+            producto.key().as_ref(),
+            &producto.total_movimientos.to_le_bytes()
+        ],
+        bump
+    )]
+    pub movimiento: Account<'info, Movimiento>,
+    #[account(mut)]
+    pub autoridad: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct DarBajaProducto<'info> {
+    #[account(
+        mut,
+        seeds = [b"almacen", autoridad.key().as_ref()],
+        bump = almacen.bump,
+        has_one = autoridad
+    )]
+    pub almacen: Account<'info, Almacen>,
+    #[account(
+        mut,
+        close = autoridad, // Cierra la cuenta y reembolsa lamports al dueño
+        has_one = almacen
+    )]
+    pub producto: Account<'info, Producto>,
+    #[account(mut)]
+    pub autoridad: Signer<'info>,
+}
+
+// --- ESTRUCTURAS DE DATOS ---
+
+#[account]
+pub struct Almacen {
+    pub autoridad: Pubkey,
+    pub nombre: String,
+    pub total_productos: u32,
+    pub bump: u8,
+}
+
+#[account]
+pub struct Producto {
+    pub almacen: Pubkey,
+    pub sku: String,
+    pub nombre: String,
+    pub stock_actual: u32,
+    pub precio_unitario: u64,
+    pub total_movimientos: u32,
+    pub bump: u8,
+}
+
+#[account]
+pub struct Movimiento {
+    pub producto: Pubkey,
+    pub es_entrada: bool,
+    pub cantidad: u32,
+    pub timestamp: i64,
+    pub bump: u8,
+}
+
+#[error_code]
+pub enum ErrorInventario {
+    #[msg("El texto excede la longitud máxima permitida.")]
+    TextoMuyLargo,
+    #[msg("La cantidad del movimiento debe ser mayor a cero.")]
+    CantidadInvalida,
+    #[msg("Stock insuficiente para realizar esta salida de inventario.")]
+    StockInsuficiente,
+    #[msg("No se puede dar de baja un producto que aún tiene unidades en stock (stock_actual > 0).")]
+    ProductoConStockActivo,
+}
