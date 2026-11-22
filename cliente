@@ -1,0 +1,48 @@
+import * as anchor from "@coral-xyz/anchor";
+import { Program } from "@coral-xyz/anchor";
+import { PublicKey, SystemProgram } from "@solana/web3.js";
+import { InventarioSolana } from "../target/types/inventario_solana";
+
+export class InventarioClient {
+  constructor(private program: Program<InventarioSolana>) {}
+
+  // Derivación determinista de PDAs
+  getAlmacenPda(autoridad: PublicKey): PublicKey {
+    const [pda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("almacen"), autoridad.toBuffer()],
+      this.program.programId
+    );
+    return pda;
+  }
+
+  getProductoPda(almacenPda: PublicKey, sku: string): PublicKey {
+    const [pda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("producto"), almacenPda.toBuffer(), Buffer.from(sku)],
+      this.program.programId
+    );
+    return pda;
+  }
+
+  getMovimientoPda(productoPda: PublicKey, totalMovimientos: number): PublicKey {
+    const bufferId = Buffer.alloc(4);
+    bufferId.writeUInt32LE(totalMovimientos, 0);
+
+    const [pda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("movimiento"), productoPda.toBuffer(), bufferId],
+      this.program.programId
+    );
+    return pda;
+  }
+
+  // Lectura de todos los productos de un almacén específico
+  async obtenerProductosDelAlmacen(almacenPda: PublicKey) {
+    return await this.program.account.producto.all([
+      {
+        memcmp: {
+          offset: 8, // Después del discriminador de 8 bytes
+          bytes: almacenPda.toBase58(),
+        },
+      },
+    ]);
+  }
+}
