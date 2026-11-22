@@ -38,3 +38,8 @@ En lugar de utilizar un modelo de registro de ventas, el dominio modela un flujo
 ## 🧩 Arquitectura de Cuentas y PDAs
 
 ```mermaid
+├── programs/inventario_solana/src/lib.rs   # Programa en Rust (Anchor): PDAs, reglas y cierre
+├── target/idl/inventario_solana.json       # IDL generado por Anchor
+├── client/inventarioClient.ts              # Cliente TypeScript coherente con el IDL
+├── components/InventarioDashboard.tsx      # Frontend con wallet adapter y manejo de errores
+└── assets/                                 # Capturas de pantalla y evidencias visuales
