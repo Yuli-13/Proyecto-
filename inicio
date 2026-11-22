@@ -1,0 +1,13 @@
+#[program]
+pub mod inventario_solana {
+    use super::*;
+   Inicializa el almacén del usuario
+    pub fn inicializar_almacen(ctx: Context<InicializarAlmacen>, nombre: String) -> Result<()> {
+        require!(nombre.len() <= 32, ErrorInventario::TextoMuyLargo);
+        let almacen = &mut ctx.accounts.almacen;
+        almacen.autoridad = ctx.accounts.autoridad.key();
+        almacen.nombre = nombre;
+        almacen.total_productos = 0;
+        almacen.bump = ctx.bumps.almacen;
+        Ok(())
+    }
