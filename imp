@@ -1,0 +1,95 @@
+"use client";
+import { useState, useEffect, useMemo } from "react";
+import { useConnection, useWallet } from "@solana/wallet-adapter-react";
+import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
+import { Program, AnchorProvider, BN } from "@coral-xyz/anchor";
+import idl from "../idl/inventario_solana.json";
+import { InventarioClient } from "../client/inventarioClient";
+
+export default function InventarioDashboard() {
+  const { connection } = useConnection();
+  const wallet = useWallet();
+  const [productos, setProductos] = useState<any[]>([]);
+  const [statusMsg, setStatusMsg] = useState<string>("");
+
+  const client = useMemo(() => {
+    if (!wallet.publicKey) return null;
+    const provider = new AnchorProvider(connection, wallet as any, {
+      commitment: "confirmed",
+    });
+    const program = new Program(idl as any, provider);
+    return new InventarioClient(program);
+  }, [connection, wallet]);
+
+  const cargarInventario = async () => {
+    if (!client || !wallet.publicKey) return;
+    try {
+      const almacenPda = client.getAlmacenPda(wallet.publicKey);
+      const lista = await client.obtenerProductosDelAlmacen(almacenPda);
+      setProductos(lista);
+    } catch (err) {
+      console.log("Almacén aún no inicializado o sin productos.");
+    }
+  };
+
+  useEffect(() => {
+    cargarInventario();
+  }, [client]);
+
+  const handleDarBaja = async (productoPda: any) => {
+    if (!client || !wallet.publicKey) return;
+    try {
+      setStatusMsg("Procesando baja en Devnet...");
+      const almacenPda = client.getAlmacenPda(wallet.publicKey);
+      
+      // @ts-ignore - Llamada directa al método generado por el IDL
+      const tx = await client["program"].methods
+        .darBajaProducto()
+        .accounts({
+          almacen: almacenPda,
+          producto: productoPda,
+          autoridad: wallet.publicKey,
+        })
+        .rpc();
+
+      setStatusMsg(`Producto eliminado. Renta recuperada. Tx: ${tx}`);
+      await cargarInventario();
+    } catch (err: any) {
+      // Captura el error personalizado de Anchor (ProductoConStockActivo)
+      setStatusMsg(`Rechazado por el programa: ${err.message}`);
+    }
+  };
+
+  return (
+    <div className="p-6 max-w-3xl mx-auto space-y-6">
+      <div className="flex justify-between items-center border-b pb-4">
+        <h1 className="text-2xl font-bold">Inventario Descentralizado (Devnet)</h1>
+        <WalletMultiButton />
+      </div>
+
+      {statusMsg && (
+        <div className="p-3 bg-slate-100 border rounded text-sm break-all">
+          {statusMsg}
+        </div>
+      )}
+
+      <div className="space-y-3">
+        <h2 className="text-lg font-semibold">Productos Registrados ({productos.length})</h2>
+        {productos.map(({ publicKey, account }) => (
+          <div key={publicKey.toBase58()} className="p-4 border rounded flex justify-between items-center">
+            <div>
+              <p className="font-bold">{account.nombre} <span className="text-xs text-gray-500">({account.sku})</span></p>
+              <p className="text-sm">Stock actual: <strong>{account.stockActual} unidades</strong></p>
+            </div>
+            <button
+              onClick={() => handleDarBaja(publicKey)}
+              className="px-3 py-1.5 bg-red-600 text-white rounded text-sm hover:bg-red-700"
+            >
+              Dar de baja
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
